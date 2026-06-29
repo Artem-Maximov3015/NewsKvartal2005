@@ -2,9 +2,6 @@
 """
 Главный скрипт: проверяет раздел новостей квартал2005.рф и отправляет
 ещё не отправленные новости в Telegram.
-
-Запускается вручную (python bot/main.py) или по расписанию через
-GitHub Actions (см. .github/workflows/check_news.yml).
 """
 
 import html
@@ -17,7 +14,7 @@ from scraper import fetch_news
 from telegram_sender import send_message, TelegramSendError
 
 NEWS_URL = os.environ.get(
-    "NEWS_URL", "https://квартал2005.рф/category/news/"
+    "NEWS_URL", "https://xn--2005-43dam7dm2cwa.xn--p1ai/category/news/"
 )
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
@@ -86,7 +83,6 @@ def main() -> None:
         print("Новых новостей нет.")
         return
 
-    # Отправляем от старых к новым, чтобы в чате порядок был естественным
     sent_any = False
     for item in reversed(new_items):
         try:
