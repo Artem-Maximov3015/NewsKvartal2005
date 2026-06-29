@@ -1,81 +1,55 @@
 # -*- coding: utf-8 -*-
-"""
-Парсер раздела "Новости" сайта квартал2005.рф.
-"""
-
 import re
 from urllib.parse import urljoin
 import requests
 from bs4 import BeautifulSoup
 
-DATE_RE = re.compile(r"\d{2}\.\d{2}\.\d{4}")
-
 HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    ),
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-    "Accept-Language": "ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3",
-    "Referer": "https://xn--2005-43dam7dm2cwa.xn--p1ai/",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "Accept": "text/html,application/xhtml+xml",
+    "Accept-Language": "ru-RU,ru;q=0.9",
 }
 
-
-def _clean_title(text: str, date_str: str) -> str:
-    """Очищает заголовок от даты и лишних символов."""
-    title = text.replace(date_str, "")
-    for sep in ["-", "—", "|", "•", "·"]:
-        title = title.strip(sep)
-    return title.strip()
-
-
 def fetch_news(url: str, timeout: int = 15):
-    """
-    Возвращает список новостей со страницы в виде словарей:
-        {"id": str, "date": str, "title": str, "link": str}
-    """
-    try:
-        resp = requests.get(url, headers=HEADERS, timeout=timeout)
-        resp.raise_for_status()
-    except Exception as e:
-        print(f"Ошибка при запросе к {url}: {e}")
-        return []
-
+    resp = requests.get(url, headers=HEADERS, timeout=timeout)
+    resp.raise_for_status()
     resp.encoding = "utf-8"
     soup = BeautifulSoup(resp.text, "html.parser")
 
     items = []
     seen_ids = set()
 
-    # Ищем все блоки, которые могут содержать новость
-    for block in soup.find_all(["article", "div", "li", "tr", "section"]):
-        block_text = block.get_text(" ", strip=True)
-        if not block_text:
+    # Ищем все статьи (WordPress post)
+    for article in soup.find_all("article", class_=re.compile(r"post")):
+        # Ищем заголовок
+        title_tag = article.find("a", class_=re.compile(r"title"))
+        if not title_tag:
             continue
-
-        m = DATE_RE.search(block_text)
-        if not m:
-            continue
-
-        date_str = m.group(0)
-
-        link_tag = block.find("a", href=True)
-        if not link_tag:
-            continue
-
-        title = link_tag.get_text(" ", strip=True)
-        if not title or len(title) < 5:
-            title = _clean_title(block_text, date_str)
-
+        
+        title = title_tag.get_text(strip=True)
         if not title:
             continue
 
-        title = _clean_title(title, date_str)
-        if not title:
-            continue
+        link = urljoin(url, title_tag.get("href", ""))
 
-        link = urljoin(url, link_tag["href"])
-        uid = link if link else f"{date_str}:{title[:80]}"
+        # Ищем дату
+        date_tag = article.find("time")
+        if date_tag:
+            date_str = date_tag.get_text(strip=True)
+        else:
+            # Пробуем найти дату в тексте
+            text = article.get_text()
+            # Ищем дату в формате "08 Июн" или "08.06.2026"
+            date_match = re.search(r'(\d{2}\s+[А-Яа-я]{3,}|[\d]{2}\.[\d]{2}\.[\d]{4})', text)
+            date_str = date_match.group(0) if date_match else "Дата неизвестна"
+
+        # Или пробуем найти через og:published_time
+        if date_str == "Дата неизвестна":
+            meta_tag = article.find("meta", {"property": "article:published_time"})
+            if meta_tag:
+                date_str = meta_tag.get("content", "").split("T")[0]
+
+        uid = link if link else title
 
         if uid in seen_ids:
             continue
@@ -88,25 +62,33 @@ def fetch_news(url: str, timeout: int = 15):
             "link": link
         })
 
-    # Запасная стратегия
+    # Если не нашли через article, ищем через entry-title
     if not items:
-        for a in soup.find_all("a", href=True):
-            text = a.get_text(" ", strip=True)
-            if not text:
-                continue
-            m = DATE_RE.search(text)
-            if not m:
-                continue
-            date_str = m.group(0)
-            title = _clean_title(text, date_str)
+        for title_tag in soup.find_all("a", class_=re.compile(r"entry-title|title")):
+            title = title_tag.get_text(strip=True)
             if not title:
                 continue
-            link = urljoin(url, a["href"])
-            if link in seen_ids:
+            
+            link = urljoin(url, title_tag.get("href", ""))
+            
+            # Ищем дату рядом
+            parent = title_tag.parent
+            date_str = "Дата неизвестна"
+            while parent:
+                time_tag = parent.find("time")
+                if time_tag:
+                    date_str = time_tag.get_text(strip=True)
+                    break
+                parent = parent.parent
+
+            uid = link if link else title
+
+            if uid in seen_ids:
                 continue
-            seen_ids.add(link)
+            seen_ids.add(uid)
+
             items.append({
-                "id": link,
+                "id": uid,
                 "date": date_str,
                 "title": title,
                 "link": link
