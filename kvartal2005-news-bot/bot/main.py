@@ -17,7 +17,7 @@ from scraper import fetch_news
 from telegram_sender import send_message, TelegramSendError
 
 NEWS_URL = os.environ.get(
-    "NEWS_URL", "https://xn--2005-43dam7dm2cwa.xn--p1ai/novosti"
+    "NEWS_URL", "https://квартал2005.рф/category/news/"
 )
 BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
