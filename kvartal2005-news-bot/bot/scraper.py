@@ -25,7 +25,6 @@ HEADERS = {
 def _clean_title(text: str, date_str: str) -> str:
     """Очищает заголовок от даты и лишних символов."""
     title = text.replace(date_str, "")
-    # Удаляем различные разделители
     for sep in ["-", "—", "|", "•", "·"]:
         title = title.strip(sep)
     return title.strip()
@@ -36,7 +35,10 @@ def fetch_news(url: str, timeout: int = 15):
     Возвращает список новостей со страницы в виде словарей:
         {"id": str, "date": str, "title": str, "link": str}
     """
-    resp = requests.get(url, headers=HEADERS, timeout=timeout)
+    # Кодируем URL с русскими буквами
+    encoded_url = url.encode('utf-8').decode('ascii', 'ignore')
+    
+    resp = requests.get(encoded_url, headers=HEADERS, timeout=timeout)
     resp.raise_for_status()
     resp.encoding = "utf-8"
     soup = BeautifulSoup(resp.text, "html.parser")
@@ -50,19 +52,16 @@ def fetch_news(url: str, timeout: int = 15):
         if not block_text:
             continue
 
-        # Ищем дату в блоке
         m = DATE_RE.search(block_text)
         if not m:
             continue
 
         date_str = m.group(0)
 
-        # Ищем ссылку внутри блока
         link_tag = block.find("a", href=True)
         if not link_tag:
             continue
 
-        # Получаем заголовок из ссылки или из текста блока
         title = link_tag.get_text(" ", strip=True)
         if not title or len(title) < 5:
             title = _clean_title(block_text, date_str)
@@ -70,15 +69,11 @@ def fetch_news(url: str, timeout: int = 15):
         if not title:
             continue
 
-        # Очищаем заголовок
         title = _clean_title(title, date_str)
         if not title:
             continue
 
-        # Формируем полную ссылку
         link = urljoin(url, link_tag["href"])
-
-        # Уникальный ID для новости
         uid = link if link else f"{date_str}:{title[:80]}"
 
         if uid in seen_ids:
@@ -92,7 +87,7 @@ def fetch_news(url: str, timeout: int = 15):
             "link": link
         })
 
-    # Если ничего не нашли, пробуем вторую стратегию - ищем ссылки с датами
+    # Запасная стратегия
     if not items:
         for a in soup.find_all("a", href=True):
             text = a.get_text(" ", strip=True)
