@@ -5,7 +5,6 @@
 
 import re
 from urllib.parse import urljoin
-
 import requests
 from bs4 import BeautifulSoup
 
@@ -18,7 +17,7 @@ HEADERS = {
     ),
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
     "Accept-Language": "ru-RU,ru;q=0.8,en-US;q=0.5,en;q=0.3",
-    "Referer": "https://квартал2005.рф/",
+    "Referer": "https://xn--2005-43dam7dm2cwa.xn--p1ai/",
 }
 
 
@@ -35,11 +34,13 @@ def fetch_news(url: str, timeout: int = 15):
     Возвращает список новостей со страницы в виде словарей:
         {"id": str, "date": str, "title": str, "link": str}
     """
-    # Кодируем URL с русскими буквами
-    encoded_url = url.encode('utf-8').decode('ascii', 'ignore')
-    
-    resp = requests.get(encoded_url, headers=HEADERS, timeout=timeout)
-    resp.raise_for_status()
+    try:
+        resp = requests.get(url, headers=HEADERS, timeout=timeout)
+        resp.raise_for_status()
+    except Exception as e:
+        print(f"Ошибка при запросе к {url}: {e}")
+        return []
+
     resp.encoding = "utf-8"
     soup = BeautifulSoup(resp.text, "html.parser")
 
