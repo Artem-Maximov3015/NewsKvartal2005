@@ -11,43 +11,43 @@ HEADERS = {
 }
 
 def fetch_news(url: str, timeout: int = 15):
-    resp = requests.get(url, headers=HEADERS, timeout=timeout)
-    resp.raise_for_status()
+    print(f"Запрос к URL: {url}")
+    
+    try:
+        resp = requests.get(url, headers=HEADERS, timeout=timeout)
+        resp.raise_for_status()
+        print(f"Статус: {resp.status_code}")
+    except Exception as e:
+        print(f"Ошибка запроса: {e}")
+        return []
+
     resp.encoding = "utf-8"
     soup = BeautifulSoup(resp.text, "html.parser")
+    
+    print(f"Длина HTML: {len(resp.text)} символов")
 
     items = []
     seen_ids = set()
 
-    # Ищем все статьи (WordPress post)
-    for article in soup.find_all("article", class_=re.compile(r"post")):
-        # Ищем заголовок
-        title_tag = article.find("a", class_=re.compile(r"title"))
-        if not title_tag:
-            continue
-        
+    # Ищем все заголовки с классом entry-title
+    for title_tag in soup.find_all("a", class_="entry-title"):
         title = title_tag.get_text(strip=True)
+        print(f"Найден заголовок: {title}")
+        
         if not title:
             continue
 
         link = urljoin(url, title_tag.get("href", ""))
-
+        
         # Ищем дату
-        date_tag = article.find("time")
-        if date_tag:
-            date_str = date_tag.get_text(strip=True)
-        else:
-            # Пробуем найти дату в тексте
-            text = article.get_text()
-            # Ищем дату в формате "08 Июн" или "08.06.2026"
-            date_match = re.search(r'(\d{2}\s+[А-Яа-я]{3,}|[\d]{2}\.[\d]{2}\.[\d]{4})', text)
-            date_str = date_match.group(0) if date_match else "Дата неизвестна"
-
-        # Или пробуем найти через og:published_time
-        if date_str == "Дата неизвестна":
-            meta_tag = article.find("meta", {"property": "article:published_time"})
-            if meta_tag:
-                date_str = meta_tag.get("content", "").split("T")[0]
+        parent = title_tag.parent
+        date_str = "Дата неизвестна"
+        while parent:
+            time_tag = parent.find("time")
+            if time_tag:
+                date_str = time_tag.get_text(strip=True)
+                break
+            parent = parent.parent
 
         uid = link if link else title
 
@@ -62,36 +62,5 @@ def fetch_news(url: str, timeout: int = 15):
             "link": link
         })
 
-    # Если не нашли через article, ищем через entry-title
-    if not items:
-        for title_tag in soup.find_all("a", class_=re.compile(r"entry-title|title")):
-            title = title_tag.get_text(strip=True)
-            if not title:
-                continue
-            
-            link = urljoin(url, title_tag.get("href", ""))
-            
-            # Ищем дату рядом
-            parent = title_tag.parent
-            date_str = "Дата неизвестна"
-            while parent:
-                time_tag = parent.find("time")
-                if time_tag:
-                    date_str = time_tag.get_text(strip=True)
-                    break
-                parent = parent.parent
-
-            uid = link if link else title
-
-            if uid in seen_ids:
-                continue
-            seen_ids.add(uid)
-
-            items.append({
-                "id": uid,
-                "date": date_str,
-                "title": title,
-                "link": link
-            })
-
+    print(f"Найдено новостей: {len(items)}")
     return items[:10]
